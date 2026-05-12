@@ -1,0 +1,97 @@
+input:
+  mode: toggle
+  toggle_hotkey: f8
+  claude_hotkey: ctrl+alt+c
+  codex_hotkey: ctrl+alt+x
+  stop_tts_hotkey: esc
+
+stt:
+  provider: funasr
+  profile: paraformer_zh
+  use_local_cache: true
+  local_cache_root: models/modelscope
+  model: paraformer-zh
+  model_hub: ms
+  model_revision: v2.0.4
+  vad_model: fsmn-vad
+  vad_model_revision: v2.0.4
+  punc_model: ct-punc-c
+  punc_model_revision: v2.0.4
+  device: cpu
+  sample_rate: 16000
+  batch_size_s: 60
+  load_timeout_seconds: 90
+  fallback_provider: faster_whisper
+  fallback_local_cache_root: models/huggingface
+  fallback_model: base
+  fallback_beam_size: 2
+  hotwords: "Claude Codex code x F7 F8 代码 项目 文件 测试 修复 修改 实现 解释 总结 提交 运行"
+
+agents:
+  default: codex
+  timeout_seconds: 900
+  claude:
+    enabled: true
+    command: claude
+    args:
+      - -p
+    working_directory: current
+  codex:
+    enabled: true
+    command: codex.cmd
+    args:
+      - exec
+      - --skip-git-repo-check
+      - --sandbox
+      - danger-full-access
+    working_directory: current
+
+routing:
+  prefer_explicit_agent_name: true
+  allow_auto_route: true
+  local_commands:
+    stop:
+      - "停止"
+      - "停止朗读"
+      - "别读了"
+    retry:
+      - "重新录音"
+      - "重来"
+    cancel:
+      - "取消"
+      - "放弃"
+    confirm:
+      - "确认"
+      - "继续"
+    reject:
+      - "不确认"
+      - "不要"
+
+output:
+  display_full_text: true
+  tts_enabled: true
+  beep_enabled: true
+  f7_send_delay_ms: 1000
+  tts_voice: zh-CN-XiaoxiaoNeural
+  tts_rate: +0%
+  max_spoken_sentences: 2
+  max_spoken_chars: 120
+  skip_code_blocks: true
+  skip_diff: true
+  skip_logs: true
+
+safety:
+  require_confirmation: true
+  confirm_keywords:
+    - "删除"
+    - "覆盖"
+    - "提交"
+    - "推送"
+    - "安装"
+    - "卸载"
+    - "重置"
+    - "迁移"
+    - "清空"
+    - "格式化"
+    - "发布"
+    - "部署"

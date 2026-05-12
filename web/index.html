@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>&#23454;&#26102;&#35821;&#38899; Agent</title>
+  <style>
+    :root {
+      --bg: #eef1f5;
+      --panel: #ffffff;
+      --ink: #111827;
+      --muted: #667085;
+      --line: #d8dee8;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --red: #dc2626;
+      --shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+    }
+
+    header {
+      background: #1f2937;
+      color: white;
+      padding: 22px 28px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin-top: 8px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    main {
+      padding: 20px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+      min-height: calc(100vh - 92px);
+    }
+
+    .toolbar, .panel {
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: auto auto auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    button, select {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+      font: inherit;
+      min-height: 42px;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 0 16px;
+    }
+
+    button.primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: white;
+      min-width: 170px;
+      min-height: 56px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    button.primary:hover { background: var(--blue-dark); }
+    button.recording { background: var(--red); border-color: var(--red); }
+    button:disabled { opacity: 0.6; cursor: default; }
+
+    select {
+      padding: 0 12px;
+      min-width: 116px;
+    }
+
+    label.option {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      color: #334155;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    label.option input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+    }
+
+    .status {
+      min-height: 42px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      color: #334155;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.25fr);
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .panel {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    textarea, pre {
+      width: 100%;
+      height: 100%;
+      min-height: 430px;
+      margin: 0;
+      border: 0;
+      outline: 0;
+      resize: none;
+      padding: 16px;
+      background: #fbfcfe;
+      color: var(--ink);
+      font: 16px/1.7 "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+
+    @media (max-width: 980px) {
+      .toolbar { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      textarea, pre { min-height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>&#23454;&#26102;&#35821;&#38899; Agent</h1>
+    <div class="sub">&#20809;&#26631;&#25918;&#22312;&#25991;&#26412;&#26694;&#37324;&#65292;&#28857;&#20987;&#24320;&#22987;&#21518;&#35828;&#35805;&#65292;&#28857;&#20987;&#20572;&#27490;&#21518;&#40664;&#35748;&#33258;&#21160;&#21457;&#36865;&#12290;</div>
+  </header>
+
+  <main>
+    <section class="toolbar">
+      <button id="mic" class="primary">&#24320;&#22987;</button>
+      <select id="target" aria-label="&#30446;&#26631; Agent">
+        <option value="auto">&#33258;&#21160;</option>
+        <option value="codex">Codex</option>
+        <option value="claude">Claude</option>
+      </select>
+      <label class="option">
+        <input id="autoSend" type="checkbox" checked />
+        &#20572;&#27490;&#21518;&#33258;&#21160;&#21457;&#36865;
+      </label>
+      <div id="status" class="status">&#20934;&#22791;&#23601;&#32490;&#12290;&#35831;&#20351;&#29992; Edge &#25110; Chrome&#65292;&#24182;&#20801;&#35768;&#40614;&#20811;&#39118;&#26435;&#38480;&#12290;</div>
+      <div>
+        <button id="copy">&#22797;&#21046;</button>
+        <button id="send">&#31435;&#21363;&#21457;&#36865;</button>
+        <button id="clear">&#28165;&#31354;</button>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-title">
+          <span>&#23454;&#26102;&#25991;&#26412;</span>
+          <span class="hint">&#21457;&#36865;&#21069;&#21487;&#20197;&#25163;&#21160;&#20462;&#25913;</span>
+        </div>
+        <textarea id="dictation" autofocus spellcheck="false" placeholder="&#28857;&#20987;&#24320;&#22987;&#65292;&#28982;&#21518;&#30452;&#25509;&#35828;&#35805;..."></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <span>Agent &#36755;&#20986;</span>
+          <span id="route" class="hint">&#23578;&#26410;&#21457;&#36865;</span>
+        </div>
+        <pre id="output"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const mic = document.querySelector("#mic");
+    const target = document.querySelector("#target");
+    const autoSend = document.querySelector("#autoSend");
+    const statusBox = document.querySelector("#status");
+    const textarea = document.querySelector("#dictation");
+    const output = document.querySelector("#output");
+    const send = document.querySelector("#send");
+    const copy = document.querySelector("#copy");
+    const clear = document.querySelector("#clear");
+    const route = document.querySelector("#route");
+
+    let recognition = null;
+    let listening = false;
+    let baseBefore = "";
+    let baseAfter = "";
+    let finalText = "";
+    let lastSubmittedText = "";
+    let activeJobId = "";
+
+    function setStatus(text) {
+      statusBox.textContent = text;
+    }
+
+    function insertLive(interim) {
+      textarea.value = baseBefore + finalText + interim + baseAfter;
+      const caret = (baseBefore + finalText + interim).length;
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+    }
+
+    function startListening() {
+      if (!SpeechRecognition) {
+        setStatus("\u5f53\u524d\u6d4f\u89c8\u5668\u4e0d\u652f\u6301\u5b9e\u65f6\u8bed\u97f3\u8bc6\u522b\u3002\u8bf7\u4f7f\u7528 Edge \u6216 Chrome\u3002");
+        return;
+      }
+
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? start;
+      baseBefore = textarea.value.slice(0, start);
+      baseAfter = textarea.value.slice(end);
+      finalText = "";
+
+      recognition = new SpeechRecognition();
+      recognition.lang = "zh-CN";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        listening = true;
+        mic.textContent = "\u505c\u6b62";
+        mic.classList.add("recording");
+        setStatus("\u6b63\u5728\u542c\u5199\u3002\u6587\u5b57\u4f1a\u5b9e\u65f6\u51fa\u73b0\u5728\u5de6\u4fa7\u6587\u672c\u6846\u3002");
+      };
+
+      recognition.onerror = (event) => {
+        setStatus("\u8bed\u97f3\u8bc6\u522b\u9519\u8bef\uff1a" + event.error);
+      };
+
+      recognition.onend = () => {
+        listening = false;
+        mic.textContent = "\u5f00\u59cb";
+        mic.classList.remove("recording");
+        const text = textarea.value.trim();
+        if (autoSend.checked && text && text !== lastSubmittedText) {
+          setStatus("\u5df2\u505c\u6b62\u3002\u6b63\u5728\u81ea\u52a8\u53d1\u9001...");
+          submitToAgent();
+        } else {
+          setStatus("\u5df2\u505c\u6b62\u3002\u4f60\u53ef\u4ee5\u7f16\u8f91\u6587\u672c\uff0c\u6216\u624b\u52a8\u53d1\u9001\u3002");
+        }
+      };
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const piece = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += piece;
+          } else {
+            interim += piece;
+          }
+        }
+        insertLive(interim);
+      };
+
+      recognition.start();
+    }
+
+    function stopListening() {
+      if (recognition) recognition.stop();
+    }
+
+    mic.addEventListener("click", () => {
+      if (listening) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    });
+
+    copy.addEventListener("click", async () => {
+      const text = textarea.value.trim();
+      if (!text) {
+        setStatus("\u6ca1\u6709\u53ef\u590d\u5236\u7684\u6587\u672c\u3002");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus("\u5df2\u590d\u5236\u3002\u53ef\u4ee5\u7c98\u8d34\u5230\u5f53\u524d\u7684 Codex \u6216 Claude \u7a97\u53e3\u3002");
+      } catch (error) {
+        textarea.select();
+        setStatus("\u6d4f\u89c8\u5668\u62d2\u7edd\u526a\u8d34\u677f\u6743\u9650\u3002\u5df2\u9009\u4e2d\u6587\u672c\uff0c\u53ef\u4ee5\u6309 Ctrl+C\u3002");
+      }
+    });
+
+    send.addEventListener("click", () => {
+      submitToAgent();
+    });
+
+    async function submitToAgent() {
+      const text = textarea.value.trim();
+      if (!text) {
+        setStatus("\u6ca1\u6709\u53ef\u53d1\u9001\u7684\u6587\u672c\u3002");
+        return;
+      }
+      if (text === lastSubmittedText && activeJobId) {
+        setStatus("\u8fd9\u6bb5\u6587\u672c\u5df2\u7ecf\u53d1\u9001\u8fc7\u3002\u6b63\u5728\u7b49\u5f85\u5f53\u524d\u4efb\u52a1\u3002");
+        return;
+      }
+
+      lastSubmittedText = text;
+      send.disabled = true;
+      clearOutputForNewRun();
+      route.textContent = "\u53d1\u9001\u4e2d -> " + target.value;
+      setStatus("\u6b63\u5728\u63d0\u4ea4...");
+
+      try {
+        const response = await fetch("/api/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, target: target.value }),
+        });
+        const data = await response.json();
+        if (data.job_id) {
+          activeJobId = data.job_id;
+          route.textContent = data.target + " / running";
+          output.textContent = "[\u5df2\u63d0\u4ea4]\n\u4efb\u52a1 ID: " + data.job_id + "\n\nAgent \u6b63\u5728\u540e\u53f0\u6267\u884c\u3002";
+          setStatus("\u5df2\u63d0\u4ea4\u3002\u53f3\u4fa7\u4f1a\u663e\u793a\u7b80\u7565\u8f93\u51fa\u3002");
+          pollJob(data.job_id);
+        } else {
+          renderResult(data);
+        }
+      } catch (error) {
+        output.textContent = String(error);
+        setStatus("\u63d0\u4ea4\u5931\u8d25\uff1a" + error);
+      } finally {
+        send.disabled = false;
+      }
+    }
+
+    function clearOutputForNewRun() {
+      output.textContent = "";
+      route.textContent = "\u5c1a\u672a\u53d1\u9001";
+    }
+
+    function renderResult(data) {
+      route.textContent = (data.target || target.value) + " / " + (data.kind || "result");
+      output.textContent = [
+        data.display_output || data.summary || data.message || "",
+        data.error ? "\n[\u9519\u8bef]\n" + data.error : "",
+      ].filter(Boolean).join("\n");
+      setStatus(data.summary || data.message || "\u5df2\u5b8c\u6210\u3002");
+      activeJobId = "";
+    }
+
+    async function pollJob(jobId) {
+      try {
+        const response = await fetch("/api/jobs/" + encodeURIComponent(jobId));
+        const job = await response.json();
+        if (!job.ok && job.kind === "missing") {
+          setStatus(job.message);
+          return;
+        }
+        if (job.status === "queued" || job.status === "running") {
+          route.textContent = (job.target || target.value) + " / " + job.status;
+          setStatus("Agent \u6b63\u5728\u6267\u884c\uff1a" + job.status);
+          if (job.display_output) output.textContent = "[\u5b9e\u65f6\u8f93\u51fa]\n" + job.display_output;
+          setTimeout(() => pollJob(jobId), 700);
+          return;
+        }
+        if (job.status === "done") {
+          renderResult(job.result || {});
+        }
+      } catch (error) {
+        setStatus("\u67e5\u8be2\u4efb\u52a1\u5931\u8d25\uff1a" + error);
+      }
+    }
+
+    clear.addEventListener("click", () => {
+      textarea.value = "";
+      output.textContent = "";
+      route.textContent = "\u5c1a\u672a\u53d1\u9001";
+      lastSubmittedText = "";
+      activeJobId = "";
+      textarea.focus();
+      setStatus("\u5df2\u6e05\u7a7a\u3002");
+    });
+
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((config) => {
+        target.value = config.auto_route ? "auto" : (config.default_agent || "codex");
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
