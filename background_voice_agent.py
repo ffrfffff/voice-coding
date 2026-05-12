@@ -73,6 +73,7 @@ class BackgroundVoiceAgent:
         self.sound_dir = project_dir / "data" / "sounds"
         output_config = config.get("output", {})
         self.beep_enabled = bool(output_config.get("beep_enabled", False))
+        self.f7_paste_delay_ms = int(output_config.get("f7_paste_delay_ms", 0))
         self.f7_send_delay_ms = int(output_config.get("f7_send_delay_ms", 600))
         self.agents = build_agents(config, project_dir)
 
@@ -303,8 +304,10 @@ class BackgroundVoiceAgent:
     def _paste_clipboard_fixed(self, text: str, task_id: int) -> None:
         self._copy_to_clipboard(text)
         self.ui.status(f"F7 粘贴目标窗口: {self._foreground_window_title()}")
+        time.sleep(max(self.f7_paste_delay_ms, 0) / 1000)
         if self._is_cancelled(task_id):
             return
+        self._ensure_clipboard_text(text)
 
         from core.sendkeys import send_enter, send_shift_insert
 
@@ -345,6 +348,18 @@ class BackgroundVoiceAgent:
         if last_error:
             raise RuntimeError(f"写入剪贴板失败: {last_error}") from last_error
         raise RuntimeError("写入剪贴板失败: 剪贴板内容校验未通过")
+
+    def _ensure_clipboard_text(self, text: str) -> None:
+        import pyperclip
+
+        if pyperclip.paste() == text:
+            return
+
+        self.ui.warning("F7 paste aborted once: clipboard changed before Shift+Insert; retrying clipboard write.")
+        self._copy_to_clipboard(text)
+        if pyperclip.paste() != text:
+            raise RuntimeError("F7 clipboard verification failed before Shift+Insert; paste was not sent.")
+
 
 def run_hotkey_loop(agent: BackgroundVoiceAgent) -> None:
     from pynput import keyboard
