@@ -114,8 +114,10 @@ F8 Agent 模式：
 F7 光标听写模式：
 
 ```text
-录音 -> STT 识别 -> 写入剪贴板 -> Shift+Insert 粘贴 -> Enter 发送
+录音 -> STT 识别 -> 写入剪贴板并校验 -> 等待 -> 粘贴前再次校验剪贴板 -> Shift+Insert 粘贴 -> Enter 发送
 ```
+
+如果粘贴前发现剪贴板内容不是本次语音识别文本，程序会重新写入并再次校验；仍然失败时会中止本次粘贴和回车，避免把旧剪贴板内容发出去。
 
 Web 实时听写模式：
 
@@ -132,7 +134,7 @@ Web 实时听写模式：
 - `agents`：Claude/Codex CLI 命令、参数、工作目录和超时时间。
 - `routing`：显式 Agent 路由、本地命令、自动路由。
 - `safety`：删除、提交、推送等高风险关键词的二次确认。
-- `output`：TTS、提示音、F7 发送延迟、播报摘要长度。
+- `output`：TTS、提示音、F7 粘贴前等待、F7 发送延迟、播报摘要长度。
 
 关闭语音播报：
 
@@ -141,12 +143,15 @@ output:
   tts_enabled: false
 ```
 
-调整 F7 粘贴后回车延迟：
+调整 F7 粘贴节奏：
 
 ```yaml
 output:
+  f7_paste_delay_ms: 800
   f7_send_delay_ms: 1000
 ```
+
+`f7_paste_delay_ms` 是写入剪贴板后、发送 `Shift+Insert` 前的等待时间；`f7_send_delay_ms` 是发送 `Shift+Insert` 后、发送 `Enter` 前的等待时间。
 
 ## 模型
 
