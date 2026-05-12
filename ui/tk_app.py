@@ -7,7 +7,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from agents.base import AgentResult
-from app import build_controller
+from core.factory import build_session_controller
 
 
 class TkUI:
@@ -62,11 +62,8 @@ class VoiceRouterApp:
         self.root.after(80, self._drain_events)
 
     def _wire_controller(self) -> None:
-        self.controller = build_controller(self.config, self.project_dir)
         tk_ui = TkUI(self)
-        self.controller.ui = tk_ui
-        self.controller.stt.ui = tk_ui
-        self.controller.tts.ui = tk_ui
+        self.controller = build_session_controller(self.config, self.project_dir, tk_ui)
 
     def _build_styles(self) -> None:
         style = ttk.Style()

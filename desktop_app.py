@@ -1,38 +1,23 @@
 from __future__ import annotations
 
 import argparse
-import socket
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from core.config import load_config
-from web_app import WebAppState, make_handler
+from core.web_service import find_free_port as _find_free_port
+from core.web_service import serve_in_background
+from web_app import build_server
 
 
 def find_free_port(preferred: int = 8765) -> int:
-    if _port_available(preferred):
-        return preferred
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
-
-
-def _port_available(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-    return True
+    return _find_free_port(preferred)
 
 
 def start_server(project_dir: Path, config: dict, port: int) -> ThreadingHTTPServer:
-    state = WebAppState(config, project_dir)
-    handler = make_handler(state, project_dir / "web")
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+    server = build_server(config, project_dir, "127.0.0.1", port)
+    serve_in_background(server)
     return server
 
 

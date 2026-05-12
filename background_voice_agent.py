@@ -10,16 +10,9 @@ import traceback
 import wave
 import winsound
 
-from agents.claude_agent import ClaudeAgent
-from agents.codex_agent import CodexAgent
 from core.config import load_config
+from core.factory import build_agents, build_risk_checker, build_router, build_stt, build_summarizer, build_tts
 from core.recorder import Recorder
-from core.risk_checker import RiskChecker
-from core.router import Router
-from core.summarizer import Summarizer
-from providers.stt_whisper import FasterWhisperSTT
-from providers.stt_funasr import FunASRSTT
-from providers.tts_edge import EdgeTTS
 
 
 class BackgroundUI:
@@ -72,21 +65,16 @@ class BackgroundVoiceAgent:
         self.project_dir = project_dir
         self.ui = BackgroundUI(project_dir / "data" / "logs" / "background.log")
         self.recorder = Recorder(project_dir / "data" / "recordings")
-        self.stt = self._build_stt(config.get("stt", {}))
-        self.router = Router(config.get("routing", {}), config.get("agents", {}).get("default", "codex"))
-        self.risk_checker = RiskChecker(config.get("safety", {}), config.get("routing", {}))
-        self.summarizer = Summarizer(config.get("output", {}))
-        self.tts = EdgeTTS(config.get("output", {}), project_dir / "data" / "tts", self.ui)
+        self.stt = build_stt(config, self.ui)
+        self.router = build_router(config)
+        self.risk_checker = build_risk_checker(config)
+        self.summarizer = build_summarizer(config)
+        self.tts = build_tts(config, project_dir, self.ui)
         self.sound_dir = project_dir / "data" / "sounds"
         output_config = config.get("output", {})
         self.beep_enabled = bool(output_config.get("beep_enabled", False))
         self.f7_send_delay_ms = int(output_config.get("f7_send_delay_ms", 600))
-
-        agents_config = config.get("agents", {})
-        self.agents = {
-            "claude": ClaudeAgent(agents_config.get("claude", {}), agents_config, project_dir),
-            "codex": CodexAgent(agents_config.get("codex", {}), agents_config, project_dir),
-        }
+        self.agents = build_agents(config, project_dir)
 
         self.recording = False
         self.recording_mode: str | None = None
@@ -94,12 +82,6 @@ class BackgroundVoiceAgent:
         self.cursor_ready_to_send = False
         self.task_id = 0
         self._lock = threading.Lock()
-
-    def _build_stt(self, stt_config: dict):
-        provider = stt_config.get("provider", "faster_whisper")
-        if provider == "funasr":
-            return FunASRSTT(stt_config, self.ui)
-        return FasterWhisperSTT(stt_config, self.ui)
 
     def toggle_recording(self) -> None:
         with self._lock:
@@ -179,30 +161,6 @@ class BackgroundVoiceAgent:
             with self._lock:
                 if self.task_id == task_id:
                     self.busy = False
-
-    def _stop_and_paste_at_cursor(self) -> None:
-        try:
-            wav_path = self.recorder.stop_and_save()
-            if wav_path is None:
-                self.ui.warning("F7 \u6ca1\u6709\u5f55\u5230\u6709\u6548\u97f3\u9891\u3002")
-                return
-
-            self.ui.status("F7 \u5f55\u97f3\u7ed3\u675f\uff0c\u6b63\u5728\u8bc6\u522b\u5e76\u7c98\u8d34\u3002")
-            text = self.stt.transcribe(wav_path).strip()
-            if not text:
-                self.ui.warning("F7 \u6ca1\u6709\u8bc6\u522b\u5230\u6587\u672c\u3002")
-                return
-
-            self.ui.transcript(f"F7: {text}")
-            self._paste_text_at_cursor(text)
-            with self._lock:
-                self.cursor_ready_to_send = True
-            self.ui.status("F7 \u5df2\u7c98\u8d34\u5230\u5149\u6807\u4f4d\u7f6e\u3002\u518d\u6309 F7 \u53d1\u9001 Enter\u3002")
-        except Exception as exc:
-            self.ui.error(f"{exc}\n{traceback.format_exc()}")
-        finally:
-            with self._lock:
-                self.busy = False
 
     def _stop_paste_and_send_at_cursor(self, task_id: int) -> None:
         try:
@@ -359,13 +317,6 @@ class BackgroundVoiceAgent:
         enter_detail = send_enter()
         self.ui.status(f"F7 已发送 Enter: {enter_detail}")
 
-    def _release_modifier_keys(self, pyautogui_module) -> None:
-        for key in ("ctrl", "shift", "alt", "win"):
-            try:
-                pyautogui_module.keyUp(key)
-            except Exception:
-                pass
-
     def _foreground_window_title(self) -> str:
         try:
             import ctypes
@@ -378,9 +329,6 @@ class BackgroundVoiceAgent:
             return buffer.value or "<无标题窗口>"
         except Exception as exc:
             return f"<读取失败: {exc}>"
-
-    def _paste_text_at_cursor(self, text: str) -> None:
-        self._paste_clipboard_fixed(text, self.task_id)
 
     def _copy_to_clipboard(self, text: str) -> None:
         import pyperclip
@@ -397,17 +345,6 @@ class BackgroundVoiceAgent:
         if last_error:
             raise RuntimeError(f"写入剪贴板失败: {last_error}") from last_error
         raise RuntimeError("写入剪贴板失败: 剪贴板内容校验未通过")
-
-    def _press_enter(self) -> None:
-        try:
-            import pyautogui
-
-            pyautogui.press("enter")
-        except Exception:
-            from core.sendkeys import send_enter
-
-            send_enter()
-
 
 def run_hotkey_loop(agent: BackgroundVoiceAgent) -> None:
     from pynput import keyboard

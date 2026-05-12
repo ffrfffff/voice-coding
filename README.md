@@ -1,26 +1,48 @@
 # 本地语音 Agent 路由器
 
-这是一个本地 Push-to-Talk 语音入口，用语音把任务路由给 Claude Code 或 Codex CLI。
+这是一个 Windows 本地语音入口。它支持通过 F8 把录音内容路由给 Claude Code 或 Codex CLI，也支持通过 F7 把语音识别结果粘贴到当前光标位置并自动回车发送。项目还提供浏览器实时听写界面、桌面 WebView 包装、后台热键服务和悬浮日志面板。
 
-## 启动
+## 快速启动
+
+安装依赖：
+
+```powershell
+pip install -r requirements.txt
+```
+
+启动默认 Web 实时听写界面：
 
 ```powershell
 python app.py
 ```
 
-默认会启动浏览器实时听写模式，不会加载本地 Whisper 模型。
+默认地址：
 
-## 桌面 App 模式
+```text
+http://127.0.0.1:8765
+```
 
-双击：
+运行测试：
+
+```powershell
+python run_tests.py
+```
+
+## 常用入口
+
+桌面 App：
 
 ```text
 start_app.vbs
 ```
 
-它会以独立桌面窗口打开，并在后台自动启动本地 Agent 服务，不显示控制台。
+后台 F8/F7 语音助手：
 
-只在后台启动服务、不打开窗口：
+```text
+start_f8_voice_agent.vbs
+```
+
+后台 Web 服务，不打开窗口：
 
 ```text
 start_background.vbs
@@ -32,91 +54,137 @@ start_background.vbs
 powershell -ExecutionPolicy Bypass -File .\stop_voice_agent.ps1
 ```
 
-开机自启动：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install_startup.ps1
-```
-
-取消开机自启动：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\uninstall_startup.ps1
-```
-
-## 后台 F8 语音模式
-
-双击：
-
-```text
-start_f8_voice_agent.vbs
-```
-
-然后：
-
-- 按 `F8` 开始录音
-- 再按 `F8` 停止录音并自动发送给 Agent
-- 程序会自动判断 Claude / Codex
-- Agent 完成后只播报摘要
-- 按 `Esc` 停止当前播报
-
-光标听写发送：
-
-- 把光标放到任意输入框
-- 按 `F7` 开始录音，再按 `F7` 停止录音
-- 有线耳机中键也会触发同样的开始/停止逻辑
-- 程序会用本地模型识别，把文本写入剪贴板，再自动发送 `Shift+Insert` 和 `Enter`
-- 开始/结束录音会播放项目内自动生成的叮咚提示音
-
-看日志：
-
-```text
-data/logs/background.log
-```
-
-实时刷新日志窗口：
-
-```text
-open_live_log.vbs
-```
-
-小型悬浮日志窗：
-
-```text
-open_log_overlay.vbs
-```
-
-这个窗口支持像微信/QQ 一样隐藏到系统托盘：最小化或关闭窗口时不会退出，点托盘图标或菜单“显示日志”可以恢复。
-
-调试启动：
+调试启动后台语音助手：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start_f8_voice_agent_debug.ps1
 ```
 
-预下载/校验模型：
+## 快捷键
+
+- `F8`：开始录音；再次按下后停止录音，并把识别文本路由给 Agent。
+- `F7`：开始光标听写；再次按下后停止录音，把识别文本粘贴到当前输入框并发送 `Enter`。
+- 有线耳机中键：触发与 `F7` 相同的光标听写流程。
+- `Esc`：停止当前 TTS 播报。
+- `Ctrl+C`：退出控制台模式。
+
+直接说或输入 `Claude ...` / `Codex ...` 可以指定目标 Agent；不指定时使用 `config.yaml` 里的默认 Agent。
+
+## 项目结构
+
+根目录保留用户常用入口、Windows 启动脚本、配置和文档；核心构造逻辑下沉到 `core/`，避免多个入口重复组装同一套组件。
+
+```text
+.
+├── app.py                         # 主入口；默认启动 Web 实时听写，也支持 --text、--local-gui、--console
+├── desktop_app.py                 # pywebview 桌面壳，供 start_app.vbs / start_background.vbs 调用
+├── background_voice_agent.py      # 后台 F8 Agent 模式和 F7 光标听写模式
+├── web_app.py                     # 本地 HTTP 服务、Web API、Agent 后台任务
+├── log_overlay.py                 # 悬浮日志窗口和托盘入口
+├── config.yaml                    # 快捷键、STT、Agent、路由、安全和输出配置
+├── requirements.txt               # Python 依赖
+├── MODELS.md                      # 本地模型下载和缓存说明
+├── agents/                        # Claude/Codex CLI 适配层
+├── core/                          # 核心逻辑和公共装配
+│   ├── factory.py                 # 统一创建 Agent/STT/TTS/Router/SessionController
+│   ├── web_service.py             # 端口探测和后台 HTTP 服务线程
+│   ├── router.py                  # 路由判断
+│   ├── risk_checker.py            # 高风险操作二次确认
+│   ├── session.py                 # 录音到 Agent 的会话流程
+│   ├── recorder.py                # 录音保存
+│   ├── summarizer.py              # Agent 输出摘要
+│   └── sendkeys.py                # Windows 按键发送
+├── providers/                     # STT/TTS provider：FunASR、faster-whisper、Edge TTS
+├── ui/                            # 控制台 UI 和 Tk GUI
+├── web/                           # 浏览器实时听写前端
+├── tools/                         # 模型下载、缓存检查、F7/FunASR 手工测试工具
+├── tests/                         # 单元测试
+├── models/                        # 本地模型缓存
+└── data/                          # 运行时数据，自动生成，不纳入版本管理
+```
+
+## 核心流程
+
+F8 Agent 模式：
+
+```text
+录音 -> STT 识别 -> Router 判断 Claude/Codex/本地命令 -> RiskChecker 高风险确认 -> Agent CLI -> 摘要 -> TTS 播报
+```
+
+F7 光标听写模式：
+
+```text
+录音 -> STT 识别 -> 写入剪贴板 -> Shift+Insert 粘贴 -> Enter 发送
+```
+
+Web 实时听写模式：
+
+```text
+浏览器 SpeechRecognition -> /api/run -> WebAppState 后台任务 -> Agent CLI -> 页面轮询任务结果
+```
+
+## 配置
+
+主要配置在 `config.yaml`：
+
+- `input`：F7/F8、耳机中键、停止播报等输入配置。
+- `stt`：语音识别 provider、模型、缓存目录、超时、热词和 fallback。
+- `agents`：Claude/Codex CLI 命令、参数、工作目录和超时时间。
+- `routing`：显式 Agent 路由、本地命令、自动路由。
+- `safety`：删除、提交、推送等高风险关键词的二次确认。
+- `output`：TTS、提示音、F7 发送延迟、播报摘要长度。
+
+关闭语音播报：
+
+```yaml
+output:
+  tts_enabled: false
+```
+
+调整 F7 粘贴后回车延迟：
+
+```yaml
+output:
+  f7_send_delay_ms: 1000
+```
+
+## 模型
+
+检查模型缓存：
 
 ```powershell
-python tools/download_models.py
 python tools/check_model_cache.py
 ```
 
-如果要把模型放在项目目录里，按 [MODELS.md](MODELS.md) 执行：
+下载模型到项目目录：
 
 ```powershell
 python tools/download_project_models.py
 ```
 
-快捷键：
+更多说明见 [MODELS.md](MODELS.md)。
 
-- 按一下 `F8` 开始说话，再按一下 `F8` 停止并发送
-- 按一下 `F7` 或有线耳机中键开始光标听写，再按一下停止、粘贴并回车
-- 直接说 `Claude ...` 或 `Codex ...` 指定目标
-- 不指定目标时发送给 `config.yaml` 里的默认 Agent
-- 按 `Esc` 停止当前语音播报
-- 按 `Ctrl+C` 退出程序
+## 日志与运行数据
 
-第一次语音识别会下载并加载 `faster-whisper` 模型，耗时会比后续更久。
+运行时会自动生成这些目录：
+
+- `data/logs`：后台服务、调试和启动日志。
+- `data/recordings`：录音 wav。
+- `data/transcripts`：识别文本。
+- `data/tts`：TTS 播报音频。
+- `data/sounds`：F7/F8 开始和结束录音提示音。
+
+打开实时日志窗口：
+
+```text
+open_live_log.vbs
+```
+
+打开悬浮日志面板：
+
+```text
+open_log_overlay.vbs
+```
 
 ## 文本调试
 
@@ -128,108 +196,32 @@ python app.py --text "Codex 修复这个错误" --agent claude
 python app.py --text "停止朗读"
 ```
 
-如果想用旧版本地 Whisper 图形界面：
+旧版本地 GUI：
 
 ```powershell
 python app.py --local-gui
 ```
 
-如果想用旧版控制台热键模式：
+旧版控制台热键模式：
 
 ```powershell
 python app.py --console
 ```
 
-## 实时听写模式
+## 开机自启动
 
-如果你需要“边说边出字”，启动 Web 版：
-
-```powershell
-python web_app.py
-```
-
-然后用 Edge 或 Chrome 打开：
-
-```text
-http://127.0.0.1:8765
-```
-
-这个模式使用浏览器实时语音识别：光标放在左侧文本框里，点“开始实时听写”，文字会实时插入。完成后点“发送给 Agent”。
-
-## 测试
-
-启动前可以先跑：
+安装：
 
 ```powershell
-python run_tests.py
+powershell -ExecutionPolicy Bypass -File .\install_startup.ps1
 ```
 
-测试会覆盖配置加载、路由、高风险确认、控制器创建和 GUI 创建。
+卸载：
 
-## 配置
-
-主要配置在 `config.yaml`：
-
-- `input`: 快捷键
-- `stt`: Whisper 模型、语言、速度/准确率参数
-- `agents`: Claude/Codex CLI 命令和超时时间
-- `routing`: 本地命令和显式 Agent 路由
-- `safety`: 需要二次确认的高风险关键词
-- `output`: TTS 语音、播报开关、按键提示音和 F7 粘贴回车延迟
-
-F7 光标听写相关配置：
-
-```yaml
-input:
-  headset_middle_key: media_play_pause
-
-output:
-  beep_enabled: true
-  f7_send_delay_ms: 1000
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uninstall_startup.ps1
 ```
 
-如果不想语音播报，可以设置：
+## 清理说明
 
-```yaml
-output:
-  tts_enabled: false
-```
-
-识别速度优先的默认配置是：
-
-```yaml
-stt:
-  profile: fast
-  model: base
-  beam_size: 1
-```
-
-如果你更在意准确率，可以改成：
-
-```yaml
-stt:
-  profile: accurate
-  model: small
-  beam_size: 5
-```
-
-## 数据目录
-
-运行时会自动生成：
-
-- `data/recordings`: 录音 wav
-- `data/transcripts`: 识别文本
-- `data/tts`: 播报音频
-- `data/sounds`: F7 开始/结束录音的叮咚提示音
-
-## 版本记录
-
-### 当前版本
-
-- 修复 FunASR 本地识别在缺少 ffmpeg 时的处理方式。
-- 增加日志面板里的模型与参数配置入口。
-- 增加系统托盘隐藏/恢复日志面板能力。
-- 增加 F7 光标听写模式，并支持有线耳机中键触发。
-- F7 识别后固定写入剪贴板，发送 `Shift+Insert` 粘贴，再发送 `Enter`。
-- 修复 Windows `SendInput` 结构体大小错误导致自动粘贴/回车失败的问题。
-- 将开始/结束录音提示音换成项目生成的叮咚 wav。
+`__pycache__`、`*.pyc`、`data/recordings`、`data/transcripts`、`data/tts`、`data/logs`、`data/sounds`、`.DS_Store` 和下载中断产生的 `*.incomplete` 都是可再生成文件，已在 `.gitignore` 中忽略。

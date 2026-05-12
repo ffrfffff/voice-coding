@@ -10,29 +10,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from agents.claude_agent import ClaudeAgent
-from agents.codex_agent import CodexAgent
 from core.config import load_config
+from core.factory import build_agents, build_risk_checker, build_router, build_summarizer
 from core.output_cleaner import brief_output, clean_output
-from core.risk_checker import RiskChecker
-from core.router import Router
-from core.summarizer import Summarizer
 
 
 class WebAppState:
     def __init__(self, config: dict, project_dir: Path, agents: dict | None = None):
         self.config = config
         self.project_dir = project_dir
-        agents_config = config.get("agents", {})
-        self.router = Router(config.get("routing", {}), agents_config.get("default", "codex"))
-        self.risk_checker = RiskChecker(config.get("safety", {}), config.get("routing", {}))
-        self.summarizer = Summarizer(config.get("output", {}))
+        self.router = build_router(config)
+        self.risk_checker = build_risk_checker(config)
+        self.summarizer = build_summarizer(config)
         self.jobs: dict[str, dict[str, Any]] = {}
         self.jobs_lock = threading.Lock()
-        self.agents = agents or {
-            "claude": ClaudeAgent(agents_config.get("claude", {}), agents_config, project_dir),
-            "codex": CodexAgent(agents_config.get("codex", {}), agents_config, project_dir),
-        }
+        self.agents = agents or build_agents(config, project_dir)
 
     def submit_prompt(self, text: str, fallback_agent: str) -> dict[str, Any]:
         job_id = uuid.uuid4().hex
@@ -211,6 +203,12 @@ def make_handler(state: WebAppState, web_dir: Path):
     return Handler
 
 
+def build_server(config: dict, project_dir: Path, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
+    state = WebAppState(config, project_dir)
+    handler = make_handler(state, project_dir / "web")
+    return ThreadingHTTPServer((host, port), handler)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Realtime browser dictation UI for the voice agent router.")
     parser.add_argument("--host", default="127.0.0.1")
@@ -220,9 +218,7 @@ def main() -> int:
 
     project_dir = Path.cwd()
     config = load_config(project_dir / args.config)
-    state = WebAppState(config, project_dir)
-    handler = make_handler(state, project_dir / "web")
-    server = ThreadingHTTPServer((args.host, args.port), handler)
+    server = build_server(config, project_dir, args.host, args.port)
     print(f"实时听写界面已启动: http://{args.host}:{args.port}")
     server.serve_forever()
     return 0

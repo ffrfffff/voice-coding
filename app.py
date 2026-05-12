@@ -5,47 +5,15 @@ import webbrowser
 import sys
 from pathlib import Path
 
-from agents.claude_agent import ClaudeAgent
-from agents.codex_agent import CodexAgent
+from core.factory import build_session_controller
 from core.config import load_config
 from core.hotkeys import PushToTalkHotkeys
-from core.recorder import Recorder
-from core.risk_checker import RiskChecker
-from core.router import Router
 from core.session import SessionController
-from core.summarizer import Summarizer
-from providers.stt_whisper import FasterWhisperSTT
-from providers.stt_funasr import FunASRSTT
-from providers.tts_edge import EdgeTTS
 from ui.console import ConsoleUI
 
 
 def build_controller(config: dict, project_dir: Path) -> SessionController:
-    ui = ConsoleUI()
-    recorder = Recorder(project_dir / "data" / "recordings")
-    stt_config = config.get("stt", {})
-    stt = FunASRSTT(stt_config, ui) if stt_config.get("provider") == "funasr" else FasterWhisperSTT(stt_config, ui)
-    router = Router(config.get("routing", {}), config.get("agents", {}).get("default", "codex"))
-    risk_checker = RiskChecker(config.get("safety", {}), config.get("routing", {}))
-    summarizer = Summarizer(config.get("output", {}))
-    tts = EdgeTTS(config.get("output", {}), project_dir / "data" / "tts", ui)
-
-    agents_config = config.get("agents", {})
-    agents = {
-        "claude": ClaudeAgent(agents_config.get("claude", {}), agents_config, project_dir),
-        "codex": CodexAgent(agents_config.get("codex", {}), agents_config, project_dir),
-    }
-
-    return SessionController(
-        ui=ui,
-        recorder=recorder,
-        stt=stt,
-        router=router,
-        risk_checker=risk_checker,
-        summarizer=summarizer,
-        tts=tts,
-        agents=agents,
-    )
+    return build_session_controller(config, project_dir, ConsoleUI())
 
 
 def main() -> int:
@@ -68,13 +36,9 @@ def main() -> int:
         return 0
 
     if not args.console and not args.local_gui:
-        from http.server import ThreadingHTTPServer
+        from web_app import build_server
 
-        from web_app import WebAppState, make_handler
-
-        state = WebAppState(config, project_dir)
-        handler = make_handler(state, project_dir / "web")
-        server = ThreadingHTTPServer((args.host, args.port), handler)
+        server = build_server(config, project_dir, args.host, args.port)
         url = f"http://{args.host}:{args.port}"
         print(f"实时听写界面已启动: {url}")
         webbrowser.open(url)
