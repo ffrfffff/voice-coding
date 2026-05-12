@@ -63,9 +63,10 @@ start_f8_voice_agent.vbs
 光标听写发送：
 
 - 把光标放到任意输入框
-- 按 `F7` 开始录音
-- 再按 `F7` 停止录音
-- 程序会用本地模型识别，粘贴到光标位置，并自动发送 `Enter`
+- 按 `F7` 开始录音，再按 `F7` 停止录音
+- 有线耳机中键也会触发同样的开始/停止逻辑
+- 程序会用本地模型识别，把文本写入剪贴板，再自动发送 `Shift+Insert` 和 `Enter`
+- 开始/结束录音会播放项目内自动生成的叮咚提示音
 
 看日志：
 
@@ -109,6 +110,7 @@ python tools/download_project_models.py
 快捷键：
 
 - 按一下 `F8` 开始说话，再按一下 `F8` 停止并发送
+- 按一下 `F7` 或有线耳机中键开始光标听写，再按一下停止、粘贴并回车
 - 直接说 `Claude ...` 或 `Codex ...` 指定目标
 - 不指定目标时发送给 `config.yaml` 里的默认 Agent
 - 按 `Esc` 停止当前语音播报
@@ -173,7 +175,18 @@ python run_tests.py
 - `agents`: Claude/Codex CLI 命令和超时时间
 - `routing`: 本地命令和显式 Agent 路由
 - `safety`: 需要二次确认的高风险关键词
-- `output`: TTS 语音和播报开关
+- `output`: TTS 语音、播报开关、按键提示音和 F7 粘贴回车延迟
+
+F7 光标听写相关配置：
+
+```yaml
+input:
+  headset_middle_key: media_play_pause
+
+output:
+  beep_enabled: true
+  f7_send_delay_ms: 1000
+```
 
 如果不想语音播报，可以设置：
 
@@ -207,3 +220,16 @@ stt:
 - `data/recordings`: 录音 wav
 - `data/transcripts`: 识别文本
 - `data/tts`: 播报音频
+- `data/sounds`: F7 开始/结束录音的叮咚提示音
+
+## 版本记录
+
+### 当前版本
+
+- 修复 FunASR 本地识别在缺少 ffmpeg 时的处理方式。
+- 增加日志面板里的模型与参数配置入口。
+- 增加系统托盘隐藏/恢复日志面板能力。
+- 增加 F7 光标听写模式，并支持有线耳机中键触发。
+- F7 识别后固定写入剪贴板，发送 `Shift+Insert` 粘贴，再发送 `Enter`。
+- 修复 Windows `SendInput` 结构体大小错误导致自动粘贴/回车失败的问题。
+- 将开始/结束录音提示音换成项目生成的叮咚 wav。

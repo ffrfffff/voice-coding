@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 from pathlib import Path
+import math
 import threading
 import time
 import traceback
+import wave
 import winsound
 
 from agents.claude_agent import ClaudeAgent
@@ -75,6 +77,7 @@ class BackgroundVoiceAgent:
         self.risk_checker = RiskChecker(config.get("safety", {}), config.get("routing", {}))
         self.summarizer = Summarizer(config.get("output", {}))
         self.tts = EdgeTTS(config.get("output", {}), project_dir / "data" / "tts", self.ui)
+        self.sound_dir = project_dir / "data" / "sounds"
         output_config = config.get("output", {})
         self.beep_enabled = bool(output_config.get("beep_enabled", False))
         self.f7_send_delay_ms = int(output_config.get("f7_send_delay_ms", 600))
@@ -219,7 +222,7 @@ class BackgroundVoiceAgent:
                 return
 
             self.ui.transcript(f"F7: {text}")
-            self._paste_clipboard_with_shift_insert(text, task_id)
+            self._paste_clipboard_fixed(text, task_id)
             self.ui.status("F7 \u5df2\u7c98\u8d34\u5230\u5149\u6807\u4f4d\u7f6e\u5e76\u53d1\u9001 Enter\u3002")
         except Exception as exc:
             self.ui.error(f"{exc}\n{traceback.format_exc()}")
@@ -302,183 +305,59 @@ class BackgroundVoiceAgent:
         if not self.beep_enabled:
             return
         try:
-            winsound.Beep(frequency, duration_ms)
-        except RuntimeError:
-            pass
+            sound_path = self._dingdong_sound_path("start" if frequency >= 700 else "stop")
+            winsound.PlaySound(str(sound_path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            return
+        except Exception as sound_exc:
+            self.ui.warning(f"叮咚提示音播放失败，改用蜂鸣: {sound_exc}")
+        try:
+            winsound.Beep(988, 80)
+            time.sleep(0.03)
+            winsound.Beep(784, 120)
+        except Exception as beep_exc:
+            self.ui.warning(f"蜂鸣提示音播放失败: {beep_exc}")
 
-    def _paste_clipboard_with_shift_insert(self, text: str, task_id: int) -> None:
+    def _dingdong_sound_path(self, variant: str) -> Path:
+        self.sound_dir.mkdir(parents=True, exist_ok=True)
+        path = self.sound_dir / f"dingdong_{variant}.wav"
+        if not path.exists():
+            tones = [(1046.5, 0.09), (784.0, 0.16)] if variant == "start" else [(784.0, 0.10), (659.3, 0.18)]
+            self._write_dingdong_wav(path, tones)
+        return path
+
+    def _write_dingdong_wav(self, path: Path, tones: list[tuple[float, float]]) -> None:
+        sample_rate = 44100
+        frames = bytearray()
+        for frequency, seconds in tones:
+            frame_count = int(sample_rate * seconds)
+            for index in range(frame_count):
+                envelope = min(index / 800, 1.0) * max(1.0 - index / frame_count, 0.0)
+                value = int(32767 * 0.28 * envelope * math.sin(2 * math.pi * frequency * index / sample_rate))
+                frames.extend(value.to_bytes(2, byteorder="little", signed=True))
+            frames.extend((0).to_bytes(2, byteorder="little", signed=True) * int(sample_rate * 0.035))
+
+        with wave.open(str(path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(bytes(frames))
+
+    def _paste_clipboard_fixed(self, text: str, task_id: int) -> None:
         self._copy_to_clipboard(text)
-        time.sleep(0.25)
         self.ui.status(f"F7 粘贴目标窗口: {self._foreground_window_title()}")
         if self._is_cancelled(task_id):
             return
 
-        try:
-            from core.sendkeys import send_enter, send_shift_insert
+        from core.sendkeys import send_enter, send_shift_insert
 
-            send_shift_insert()
-            self.ui.status("F7 已执行粘贴热键: shift+insert")
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if self._is_cancelled(task_id):
-                return
-            self.ui.status(f"F7 回车目标窗口: {self._foreground_window_title()}")
-            send_enter()
-            self.ui.status("F7 已执行 Enter。")
-        except Exception as exc:
-            self.ui.warning(f"Shift+Insert/Enter 发送失败，改用 pyautogui: {exc}")
-            import pyautogui
-
-            pyautogui.hotkey("shift", "insert")
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if not self._is_cancelled(task_id):
-                pyautogui.press("enter")
-            self.ui.status("F7 已执行 pyautogui Shift+Insert 和 Enter。")
-
-    def _paste_clipboard_with_configured_hotkey(self, text: str, task_id: int) -> None:
-        self._copy_to_clipboard(text)
-        time.sleep(0.25)
-        self.ui.status(f"F7 粘贴目标窗口: {self._foreground_window_title()}")
+        paste_detail = send_shift_insert()
+        self.ui.status(f"F7 已发送 Shift+Insert: {paste_detail}")
+        time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
         if self._is_cancelled(task_id):
             return
-
-        try:
-            self._send_paste_hotkey()
-            self.ui.status(f"F7 已执行粘贴热键: {self.paste_mode}")
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if self._is_cancelled(task_id):
-                return
-            self.ui.status(f"F7 回车目标窗口: {self._foreground_window_title()}")
-            self._send_enter_key()
-            self.ui.status("F7 已执行 Enter。")
-        except Exception as exc:
-            self.ui.warning(f"pynput 粘贴/发送失败，改用原生 SendInput: {exc}")
-            from core.sendkeys import send_ctrl_v, send_enter, send_shift_insert
-
-            if self.paste_mode == "shift_insert":
-                send_shift_insert()
-            else:
-                send_ctrl_v()
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if not self._is_cancelled(task_id):
-                send_enter()
-            self.ui.status(f"F7 已执行原生粘贴热键和 Enter: {self.paste_mode}")
-
-    def _send_paste_hotkey(self) -> None:
-        from pynput.keyboard import Controller, Key
-
-        keyboard = Controller()
-        if self.paste_mode == "shift_insert":
-            keyboard.press(Key.shift)
-            time.sleep(0.05)
-            keyboard.press(Key.insert)
-            time.sleep(0.05)
-            keyboard.release(Key.insert)
-            time.sleep(0.05)
-            keyboard.release(Key.shift)
-            return
-
-        keyboard.press(Key.ctrl)
-        time.sleep(0.05)
-        keyboard.press("v")
-        time.sleep(0.05)
-        keyboard.release("v")
-        time.sleep(0.05)
-        keyboard.release(Key.ctrl)
-
-    def _send_enter_key(self) -> None:
-        from pynput.keyboard import Controller, Key
-
-        keyboard = Controller()
-        keyboard.press(Key.enter)
-        time.sleep(0.05)
-        keyboard.release(Key.enter)
-
-    def _paste_clipboard_hotkey_and_enter(self, text: str, task_id: int) -> None:
-        self._copy_to_clipboard(text)
-        time.sleep(0.25)
-        self.ui.status(f"F7 粘贴目标窗口: {self._foreground_window_title()}")
-        if self._is_cancelled(task_id):
-            return
-
-        try:
-            import pyautogui
-
-            if self.paste_mode == "shift_insert":
-                from core.sendkeys import send_shift_insert
-
-                send_shift_insert()
-            else:
-                pyautogui.hotkey("ctrl", "v")
-            self.ui.status(f"F7 已执行粘贴热键: {self.paste_mode}")
-
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if self._is_cancelled(task_id):
-                return
-
-            self.ui.status(f"F7 回车目标窗口: {self._foreground_window_title()}")
-            pyautogui.press("enter")
-            self.ui.status("F7 已执行 Enter。")
-        except Exception as exc:
-            self.ui.warning(f"pyautogui 粘贴/发送失败，改用原生 SendInput: {exc}")
-            from core.sendkeys import send_ctrl_v, send_enter, send_shift_insert
-
-            if self.paste_mode == "shift_insert":
-                send_shift_insert()
-            else:
-                send_ctrl_v()
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if not self._is_cancelled(task_id):
-                send_enter()
-            self.ui.status(f"F7 已执行原生粘贴热键和 Enter: {self.paste_mode}")
-
-    def _paste_and_send_text_at_cursor(self, text: str, task_id: int) -> None:
-        self._copy_to_clipboard(text)
-        time.sleep(0.5)
-        self.ui.status(f"F7 粘贴目标窗口: {self._foreground_window_title()}")
-        if self._is_cancelled(task_id):
-            return
-
-        try:
-            import pyautogui
-
-            pyautogui.PAUSE = 0.05
-            self._release_modifier_keys(pyautogui)
-            if self.paste_mode == "shift_insert":
-                pyautogui.keyDown("shift")
-                time.sleep(0.05)
-                pyautogui.press("insert")
-                time.sleep(0.05)
-                pyautogui.keyUp("shift")
-            else:
-                pyautogui.keyDown("ctrl")
-                time.sleep(0.05)
-                pyautogui.press("v")
-                time.sleep(0.05)
-                pyautogui.keyUp("ctrl")
-            self._release_modifier_keys(pyautogui)
-            self.ui.status(f"F7 已执行粘贴按键: {self.paste_mode}")
-
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if self._is_cancelled(task_id):
-                return
-
-            self.ui.status(f"F7 Enter 目标窗口: {self._foreground_window_title()}")
-            self._release_modifier_keys(pyautogui)
-            pyautogui.press("enter")
-            self._release_modifier_keys(pyautogui)
-            self.ui.status("F7 已执行 Enter。")
-        except Exception as exc:
-            self.ui.warning(f"pyautogui 粘贴/发送失败，改用原生 SendInput: {exc}")
-            from core.sendkeys import send_ctrl_v, send_enter, send_shift_insert
-
-            if self.paste_mode == "shift_insert":
-                send_shift_insert()
-            else:
-                send_ctrl_v()
-            time.sleep(max(self.f7_send_delay_ms, 0) / 1000)
-            if not self._is_cancelled(task_id):
-                send_enter()
-            self.ui.status(f"F7 已执行原生粘贴和 Enter: {self.paste_mode}")
+        self.ui.status(f"F7 回车目标窗口: {self._foreground_window_title()}")
+        enter_detail = send_enter()
+        self.ui.status(f"F7 已发送 Enter: {enter_detail}")
 
     def _release_modifier_keys(self, pyautogui_module) -> None:
         for key in ("ctrl", "shift", "alt", "win"):
@@ -501,26 +380,7 @@ class BackgroundVoiceAgent:
             return f"<读取失败: {exc}>"
 
     def _paste_text_at_cursor(self, text: str) -> None:
-        from core.sendkeys import send_ctrl_v, send_shift_insert
-
-        self._copy_to_clipboard(text)
-        time.sleep(0.35)
-        try:
-            if self.paste_mode == "shift_insert":
-                send_shift_insert()
-            else:
-                send_ctrl_v()
-            self.ui.status(f"F7 已执行粘贴按键: {self.paste_mode}")
-        except Exception as exc:
-            self.ui.warning(f"原生粘贴按键失败，改用 pyautogui: {exc}")
-            import pyautogui
-
-            if self.paste_mode == "shift_insert":
-                pyautogui.hotkey("shift", "insert")
-            else:
-                pyautogui.hotkey("ctrl", "v")
-            self.ui.status(f"F7 已执行 pyautogui 粘贴按键: {self.paste_mode}")
-        time.sleep(0.35)
+        self._paste_clipboard_fixed(text, self.task_id)
 
     def _copy_to_clipboard(self, text: str) -> None:
         import pyperclip
@@ -554,30 +414,41 @@ def run_hotkey_loop(agent: BackgroundVoiceAgent) -> None:
 
     f8_down = False
     f7_down = False
+    headset_down = False
+
+    def is_cursor_dictation_key(key) -> bool:
+        return key in {keyboard.Key.f7, keyboard.Key.media_play_pause}
 
     def on_press(key):
-        nonlocal f8_down, f7_down
+        nonlocal f8_down, f7_down, headset_down
         if key == keyboard.Key.f8:
             if f8_down:
                 return
             f8_down = True
             agent.toggle_recording()
-        elif key == keyboard.Key.f7:
-            if f7_down:
+        elif is_cursor_dictation_key(key):
+            if key == keyboard.Key.media_play_pause:
+                if headset_down:
+                    return
+                headset_down = True
+            elif f7_down:
                 return
-            f7_down = True
+            else:
+                f7_down = True
             agent.toggle_cursor_dictation()
         elif key == keyboard.Key.esc:
             agent.stop_tts()
 
     def on_release(key):
-        nonlocal f8_down, f7_down
+        nonlocal f8_down, f7_down, headset_down
         if key == keyboard.Key.f8:
             f8_down = False
         elif key == keyboard.Key.f7:
             f7_down = False
+        elif key == keyboard.Key.media_play_pause:
+            headset_down = False
 
-    agent.ui.status("\u540e\u53f0\u8bed\u97f3 Agent \u5df2\u542f\u52a8\u3002F8 \u53d1\u7ed9 Agent\uff1bF7 \u5f55\u97f3/\u7c98\u8d34/\u53d1\u9001\uff1bEsc \u505c\u6b62\u64ad\u62a5\u3002")
+    agent.ui.status("\u540e\u53f0\u8bed\u97f3 Agent \u5df2\u542f\u52a8\u3002F8 \u53d1\u7ed9 Agent\uff1bF7/\u8033\u673a\u4e2d\u952e \u5f55\u97f3/\u7c98\u8d34/\u53d1\u9001\uff1bEsc \u505c\u6b62\u64ad\u62a5\u3002")
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
 

@@ -86,6 +86,12 @@ class HotkeyTests(unittest.TestCase):
     def test_f8_hotkey_parses(self) -> None:
         self.assertEqual(parse_hotkey("f8"), [{"f8"}])
 
+    def test_sendinput_structure_matches_windows_x64(self) -> None:
+        import ctypes
+        from core.sendkeys import INPUT
+
+        self.assertEqual(ctypes.sizeof(INPUT), 40)
+
 
 class OutputCleanerTests(unittest.TestCase):
     def test_removes_ansi_and_mojibake_lines(self) -> None:
@@ -176,9 +182,10 @@ class StartupTests(unittest.TestCase):
         self.assertIn("toggle_cursor_dictation", source)
         self.assertIn("keyboard.Key.f7", source)
         self.assertIn("_stop_paste_and_send_at_cursor", source)
-        self.assertIn("pyautogui.hotkey", source)
-        self.assertIn("pyautogui.press", source)
-        self.assertIn("shift_insert", source)
+        self.assertIn("send_shift_insert", source)
+        self.assertIn("send_enter", source)
+        self.assertNotIn("paste_mode", source)
+        self.assertIn("keyboard.Key.media_play_pause", source)
         self.assertIn("_cancel_current_task_locked", source)
         self.assertIn("_is_cancelled", source)
 

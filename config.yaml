@@ -3,6 +3,7 @@ input:
   toggle_hotkey: f8
   claude_hotkey: ctrl+alt+c
   codex_hotkey: ctrl+alt+x
+  headset_middle_key: media_play_pause
   stop_tts_hotkey: esc
 
 stt:
